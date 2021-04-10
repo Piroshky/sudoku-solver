@@ -1,9 +1,13 @@
 #include<iostream>
 #include<fstream>
 #include<unistd.h>
+#include<cstring>
 using namespace std;
 
 void print_puzzle();
+void print_puzzle_highlight();
+void print_puzzle_no_highlight();
+int set_highlight_color(char *color);
 void reprint_puzzle();
 void place_number(uint8_t y, uint8_t x, uint8_t value, bool reprint);
 void integrity_check();
@@ -14,6 +18,8 @@ void onexit() {
 
 uint8_t remaining = 81;
 uint8_t grid[9][9] = {0};
+uint8_t highlight_grid[9][9] = {0};
+char    highlight_color[10] = {0};
 
 // first number is how many possible numbers that cell could be
 uint8_t potential[9][9][10];
@@ -28,6 +34,7 @@ uint8_t found_col[81];
 // option related variables
 bool animate = false;
 bool plain = false;
+bool highlight = false;
 int sleep_time = 36000;
 int cells_to_find = -1;
 
@@ -50,13 +57,26 @@ int main (int argc, char *argv[]) {
 	++ix;
       } else if (argv[ix][1] == 'p') {
 	plain = true;
-      } else if (argv[ix][1] == 'n'){
+      } else if (argv[ix][1] == 'n') {
 	if (ix+1 >= argc || !isdigit(argv[ix+1][0])) {
 	  printf("error: -n option (number of cells to find) requires numeric argument\n");
 	  exit(1);
 	}
 	cells_to_find = stoi(argv[ix+1], nullptr);
 	++ix;
+      } else if (argv[ix][1] == 'h') {
+	strcpy(highlight_color, "31");
+	highlight = true;
+      }	else if (argv[ix][1] == 'H') {
+	if (ix+1 >= argc || set_highlight_color(argv[ix+1]) == 0) {
+	  printf("error: -H option (color) is invalid or missing\n");
+	  exit(1);
+	}
+	printf("%s \n", argv[ix+1]);
+	printf("set h color %d\n", set_highlight_color(argv[ix+1]));
+	highlight = true;
+	ix++;
+	
       } else {
 	printf("error: unrecognized argument, '-%c'\n", argv[ix][1]);
 	exit(1);
@@ -68,9 +88,13 @@ int main (int argc, char *argv[]) {
   if (filename == NULL) {
     printf("usage: %s file [options]\n"
 	   "options: a     animate, turn on animation\n"
-	   "         A <x> turn on animation and set animation time to <x>\n"
+	   "         A <x> turn on animation and set animation time to <x> milliseconds\n"
 	   "         p     plain, only print numbers (and spaces for unfilled characters)\n"
-	   "         n <x> only find <x> more cells\n", argv[0]);
+	   "         n <x> only find <x> more cells\n"
+	   "         h     highlight numbers found by program\n"
+	   "         H <c> highlight numbers with color <c>\n"
+	   "               Available colors:\n"
+	   "               red, cyan, green, blue, magenta, cyan, yellow, white, black\n", argv[0]);
     exit(1);
   }
   
@@ -104,7 +128,8 @@ int main (int argc, char *argv[]) {
       if (line[col] == ' ' || line[col] == '0') {
 	// do nothing
       } else if (isdigit(line[col])) {
-	place_number(row, col, line[col] - '0', false);	
+	place_number(row, col, line[col] - '0', false);
+	highlight_grid[row][col] = 0;
       } else {
 	fprintf(stderr, "unexpected character on line %d:%d, \"\"\n", row+1, col+1);
 	exit(1);
@@ -402,6 +427,15 @@ void reprint_puzzle() {
 }
 
 void print_puzzle() {
+  if (highlight) {
+    print_puzzle_highlight();
+  } else {
+    print_puzzle_no_highlight();
+  }  
+}
+
+
+void print_puzzle_no_highlight() {
   if (!plain) {printf("┌───────┬───────┬───────┐\n");}
   for (auto r = 0; r < 9; ++r) {
     char line[9];
@@ -428,7 +462,77 @@ void print_puzzle() {
   if (!plain) {printf("└───────┴───────┴───────┘\n");}
 }
 
+void print_puzzle_highlight() {
+  if (!plain) {printf("┌───────┬───────┬───────┐\n");}
+  for (auto r = 0; r < 9; ++r) {
+    char line[9];
+    for (int i = 0; i < 9; ++i) {
+      if (grid[r][i] == 0) {
+	line[i] = ' ';
+      } else {
+	line[i] = '0' + grid[r][i];
+      }
+    }
+    if (!plain) {
+      for (int c = 0; c < 9; ++c) {
+	if(c % 3 == 0) {printf("│ "); }
+	if (highlight_grid[r][c] != 0){
+	  printf("\e[%sm%c\e[39m ", highlight_color, line[c]);
+	} else {
+	  printf("%c ", line[c]);
+	}
+      }
+      printf("│\n");
+      
+    } else {
+      for (int c = 0; c < 9; ++c) {
+	if (highlight_grid[r][c] != 0){
+	  printf("\e[%sm%c\e[39m", highlight_color, line[c]);
+	} else {
+	  printf("%c", line[c]);
+	}
+      }
+      printf("\n");
+    }
+    if (!plain && (r == 2 || r == 5)) {
+      printf("├───────┼───────┼───────┤\n");      
+    }
+  }
+  if (!plain) {printf("└───────┴───────┴───────┘\n");}  
+}
+
+int set_highlight_color(char *color) {
+  if (strncmp(color, "black", 5) == 0) {
+    strcpy(highlight_color, "30");
+    return 10;
+  } else if (strncmp(color, "red", 3) == 0) {
+    strcpy(highlight_color, "31");
+    return 2;
+  } else if (strncmp(color, "green", 5) == 0) {
+    strcpy(highlight_color, "32");
+    return 3;
+  } else if (strncmp(color, "yellow", 6) == 0) {
+    strcpy(highlight_color, "33");
+    return 4;
+  } else if (strncmp(color, "blue", 4) == 0) {
+    strcpy(highlight_color, "34");
+    return 5;
+  } else if (strncmp(color, "magenta", 7) == 0) {
+    strcpy(highlight_color, "35");
+    return 6;
+  } else if (strncmp(color, "cyan", 4) == 0) {
+    strcpy(highlight_color, "36");
+    return 7;
+  } else if (strncmp(color, "white", 5) == 0) {
+    strcpy(highlight_color, "37");
+    return 8;
+  } else {
+    return 0;
+  }
+}
+
 void place_number(uint8_t y, uint8_t x, uint8_t value, bool reprint) {
+  highlight_grid[y][x] = 1;
   if (remaining == 0) {return;}
   grid[y][x] = value;
   --remaining;
